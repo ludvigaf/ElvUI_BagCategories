@@ -1,0 +1,21 @@
+## Interface: 20506
+## Title: |cff1784d1ElvUI|r |cfd9b9b9bBag Categories|r
+## Notes: Groups ElvUI's bag and bank windows into categories (Quest Items, Currency, BoE, Trade Goods, Recipes, Reagents, Gems, Ammo & Quivers, Bags, Keys, Pets, Toys, Soulbound, Potions & Consumables, Food & Water, Trash) with per-category toggles, drag-and-drop sort order, collapsible sections, ItemRack equipment sets, and an optional bag/bank value total.
+## Author: ludvigaf
+## Version: 1.0.0
+## RequiredDeps: ElvUI
+## OptionalDeps: ItemRack, Auctionator
+## SavedVariables: ElvUIBagCategoriesDB
+## Group: ElvUI
+## X-Repository: https://github.com/ludvigaf/ElvUI_BagCategories
+## X-Website: https://github.com/ludvigaf/ElvUI_BagCategories
+
+Core.lua
+Labels.lua
+CategoryTree.lua
+ItemRackIntegration.lua
+PriceSources.lua
+Classification.lua
+Layout.lua
+Options.lua
+Init.lua
