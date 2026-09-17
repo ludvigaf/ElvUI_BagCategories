@@ -8,6 +8,16 @@ local BF = E:GetModule('BagCategories')
 local _G = _G
 local ipairs, pairs = ipairs, pairs
 
+local function CountSetItems(set)
+	local count = 0
+	if set and set.equip then
+		for _ in pairs(set.equip) do
+			count = count + 1
+		end
+	end
+	return count
+end
+
 local function GetItemRackSetNames()
 	if not (_G.ItemRackUser and _G.ItemRackUser.Sets) then return nil end
 
@@ -20,7 +30,19 @@ local function GetItemRackSetNames()
 		end
 	end
 
-	if names then table.sort(names) end
+	-- Default order: fullest sets first (most likely to be your "main" sets),
+	-- alphabetical among ties. This is only ever the *fallback* order though --
+	-- GetOrderedChildren prefers a saved BF.db.order[path] once you've dragged
+	-- these into a custom order from the options panel, same as every other
+	-- reorderable category.
+	if names then
+		local Sets = _G.ItemRackUser.Sets
+		table.sort(names, function(a, b)
+			local countA, countB = CountSetItems(Sets[a]), CountSetItems(Sets[b])
+			if countA ~= countB then return countA > countB end
+			return a < b
+		end)
+	end
 	return names
 end
 
@@ -57,14 +79,17 @@ end
 -- idempotent for the rest of the tree.
 function BF:RefreshItemRackData()
 	BF.ItemRackLookup = nil
-	BF.EquipmentNode.children = nil
+	BF.EquipmentNode.children = BF.EquipmentSlotTypeChildren
 
 	if BF.db.itemRackSetsEnabled then
 		local setNames = GetItemRackSetNames()
 		if setNames then
 			BF.ItemRackLookup = BuildItemRackLookup(setNames)
 
-			local children = {}
+			-- Set-name subcategories are appended after the fixed Armor/Weapons/
+			-- Accessories split (BF.EquipmentSlotTypeChildren), which must survive
+			-- every refresh since sets can come and go at any time.
+			local children = { unpack(BF.EquipmentSlotTypeChildren) }
 			for _, name in ipairs(setNames) do
 				children[#children + 1] = { key = BF:Slugify(name), label = name }
 			end

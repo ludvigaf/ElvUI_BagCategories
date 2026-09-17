@@ -56,7 +56,52 @@ local function IsToyItem(itemID)
 	return itemID and C_ToyBox and C_ToyBox.GetToyInfo and (C_ToyBox.GetToyInfo(itemID) and true or false)
 end
 
+-- Item ID 6948 -- unchanged since vanilla, so safe to hardcode rather than
+-- match by name/tooltip text.
+local HEARTHSTONE_ITEM_ID = 6948
+
+-- The three broad "kinds" of equipment slot, used only when the player opts
+-- into the Soulbound > Equipment > Armor/Weapons/Accessories split (off by
+-- default -- see BF.DefaultDisabledPaths in CategoryTree.lua). Anything not
+-- listed in either table (Head, Shoulder, Chest, Waist, Legs, Feet, Wrist,
+-- Hand, Cloak, Shield, Holdable, ...) falls through to Armor, since that's
+-- the correct bucket for the large majority of plain gear pieces.
+local WEAPON_EQUIP_LOCS = {
+	INVTYPE_WEAPON = true, INVTYPE_2HWEAPON = true, INVTYPE_WEAPONMAINHAND = true,
+	INVTYPE_WEAPONOFFHAND = true, INVTYPE_RANGED = true, INVTYPE_RANGEDRIGHT = true,
+	INVTYPE_THROWN = true,
+}
+local ACCESSORY_EQUIP_LOCS = {
+	INVTYPE_NECK = true, INVTYPE_FINGER = true, INVTYPE_TRINKET = true,
+	INVTYPE_RELIC = true, INVTYPE_BODY = true, INVTYPE_TABARD = true,
+}
+
+local function GetEquipmentKindKey(itemEquipLoc)
+	if WEAPON_EQUIP_LOCS[itemEquipLoc] then return 'weapons' end
+	if ACCESSORY_EQUIP_LOCS[itemEquipLoc] then return 'accessories' end
+	return 'armor'
+end
+
 local function RawClassifyPath(slot, bagID)
+	-- Explicitly pinned to plain Soulbound (not the Miscellaneous catch-all it
+	-- would otherwise land in, being bound but not equipment/a mount/a toy) --
+	-- common enough, and important enough to find quickly, to deserve its own
+	-- top-level spot rather than blending into Soulbound's leftovers.
+	if slot.itemID == HEARTHSTONE_ITEM_ID then
+		return 'soulbound'
+	end
+
+	-- PvP Marks of Honor (Alterac Valley confirmed itemID 20560) turned out to
+	-- report itemClassID 0 / itemSubClassID 0 on this client -- Blizzard's
+	-- plain generic "Consumable" bucket, not the itemClassID 10 ("Money")
+	-- assumed previously. That subclass is shared with too many unrelated
+	-- items to key off directly, so these are pinned by itemID instead, the
+	-- same way BF.TradegoodsItemOverride handles Venom Sacs. Add the other
+	-- battleground marks here once their itemIDs are confirmed in-game.
+	if slot.itemID and BF.CurrencyItemOverride[slot.itemID] then
+		return 'currency'
+	end
+
 	if IsToyItem(slot.itemID) then
 		return 'toys'
 	end
@@ -89,11 +134,12 @@ local function RawClassifyPath(slot, bagID)
 
 		if not slot.isBound then
 			if bindType == BIND_ON_EQUIP then
-				return 'boe'
+				local qualityKey = slot.rarity and BF.BoEQualityKey[slot.rarity]
+				return qualityKey and ('boe.'..qualityKey) or 'boe.other'
 			end
 		else
 			if slot.isEquipment or slot.itemEquipLoc == 'INVTYPE_RELIC' then
-				return 'soulbound.equipment'
+				return 'soulbound.equipment.'..GetEquipmentKindKey(slot.itemEquipLoc)
 			end
 
 			if slot.itemClassID == ITEM_CLASS_MISCELLANEOUS and slot.itemSubClassID == ITEM_SUBCLASS_MOUNT then
@@ -103,7 +149,8 @@ local function RawClassifyPath(slot, bagID)
 
 		local path
 		if slot.itemClassID == ITEM_CLASS_TRADEGOODS then
-			local subKey = itemSubType and BF.TradegoodsSubtypeKey[itemSubType]
+			local overrideKey = slot.itemID and BF.TradegoodsItemOverride[slot.itemID]
+			local subKey = overrideKey or (itemSubType and BF.TradegoodsSubtypeKey[itemSubType])
 			path = subKey and ('tradegoods.'..subKey) or 'tradegoods.other'
 		elseif slot.itemClassID == ITEM_CLASS_REAGENT then
 			path = 'reagents'
@@ -116,7 +163,8 @@ local function RawClassifyPath(slot, bagID)
 			-- read as "ammo stuff" to a player, so they share one category.
 			path = 'ammo'
 		elseif slot.itemClassID == ITEM_CLASS_GEM then
-			path = 'gems'
+			local subKey = slot.itemSubClassID and BF.GemSubclassKey[slot.itemSubClassID]
+			path = subKey and ('gems.'..subKey) or 'gems.other'
 		elseif slot.itemClassID == ITEM_CLASS_CONTAINER then
 			-- A spare/unequipped bag sitting in your inventory (regular or a
 			-- profession-specific one like a Soul Bag or Herb Bag).
@@ -139,7 +187,8 @@ local function RawClassifyPath(slot, bagID)
 			if slot.itemSubClassID == ITEM_SUBCLASS_FOOD_DRINK then
 				path = 'food'
 			else
-				path = 'consumable'
+				local subKey = slot.itemSubClassID and BF.ConsumableSubclassKey[slot.itemSubClassID]
+				path = subKey and ('consumable.'..subKey) or 'consumable.other'
 			end
 		end
 

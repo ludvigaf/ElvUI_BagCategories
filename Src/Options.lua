@@ -109,7 +109,14 @@ function BF:BuildLeafArgs(args, node, argKey, path, order)
 		type = 'toggle',
 		name = node.label,
 		order = order,
-		width = 'full',
+		-- 'relative' (rather than 'full') lets AceConfigDialog's flow layout place
+		-- these side by side, left-to-right, wrapping to the next row only once a
+		-- row is full -- instead of one category per row stacked top-to-bottom.
+		-- Relative (a fraction of the panel's actual width) rather than a fixed
+		-- pixel width, so the three columns fill the row edge-to-edge instead of
+		-- leaving the rest of the panel empty and truncating longer labels.
+		width = 'relative',
+		relWidth = 0.33,
 		get = function() return BF:IsCategoryEnabled(path) end,
 		set = function(_, value)
 			BF.db.categories[path] = value
@@ -121,65 +128,92 @@ function BF:BuildLeafArgs(args, node, argKey, path, order)
 	}
 end
 
-function BF:BuildCategoryArgs(nodes, groupKey)
-	local ordered = BF:GetOrderedChildren(nodes, groupKey)
-	-- A top spacer inside every panel this builds -- since this function also
-	-- builds each nested subcategory's own panel (Soulbound, Mounts, Trade
-	-- Goods, Recipes), this gives all of them consistent top padding, not just
-	-- the root "Categories & Sort Order" list.
+-- Builds the flat "Reorder" content for one sibling group: the drag-and-drop
+-- sort-order list (spanning every sibling, groups included, since that's the
+-- real bag stacking order -- see BuildDragDropOrderArg) followed by every
+-- plain leaf category's enable/disable toggle.
+function BF:BuildReorderArgs(ordered, groupKey, leaves)
 	local args = { topSpacer = Spacer(0) }
 
-	-- Ordered 4.5/5/6 so that, for a nested panel, this lands after the
-	-- "Enable X" row and "Subcategories" header a caller injects afterward
-	-- (orders 1-4) but before the individual items (orders 10+).
 	if #ordered > 1 then
 		args.dragOrderDesc = {
 			type = 'description',
 			name = 'Drag a category below onto another to swap their positions in the bag.',
-			order = 4.5,
+			order = 1,
 		}
-		args.dragOrder = BF:BuildDragDropOrderArg(ordered, groupKey, 5)
-		args.dragOrderSpacer = Spacer(6)
+		args.dragOrder = BF:BuildDragDropOrderArg(ordered, groupKey, 2)
+		args.dragOrderSpacer = Spacer(3)
 	end
 
-	for i, node in ipairs(ordered) do
-		local path = node.path
+	for i, node in ipairs(leaves) do
+		BF:BuildLeafArgs(args, node, node.path, node.path, 10 + i * 10)
+	end
 
+	return args
+end
+
+-- Builds the args for one sibling group's panel. Returns (args, hasTabs):
+--   hasTabs=false -> `args` is just the flat "Reorder" content above, meant
+--     to be used directly as a panel's args (e.g. Trade Goods/Recipes, whose
+--     children are all plain leaves -- nothing else to tab against).
+--   hasTabs=true  -> `args` contains a "Reorder" tab (the same flat content)
+--     plus one additional tab per sibling that itself has subcategories; the
+--     caller must set `childGroups = 'tab'` on the group using this so
+--     AceConfigDialog renders those as an actual tab strip instead of a
+--     click-to-expand tree node.
+function BF:BuildCategoryArgs(nodes, groupKey)
+	local ordered = BF:GetOrderedChildren(nodes, groupKey)
+
+	local withChildren, leaves = {}, {}
+	for _, node in ipairs(ordered) do
 		if node.children then
-			local childArgs = BF:BuildCategoryArgs(node.children, path)
-
-			-- A category with its own panel doesn't also get a row in the parent
-			-- list -- that used to leave "Soulbound" showing up twice (once as a
-			-- flat row, once as a whole separate panel) and broke up the flat
-			-- list of simple categories. Instead, its enable toggle becomes the
-			-- first row INSIDE its own panel.
-			BF:BuildLeafArgs(childArgs, node, 'enable', path, 1)
-			childArgs.enable.name = 'Enable '..node.label
-
-			-- Full-width "header" widgets always force a line break before and
-			-- after themselves, so this guarantees the subcategories below can't
-			-- visually run together with the Enable row above it.
-			childArgs.subcategoriesHeader = {
-				type = 'header',
-				name = 'Subcategories',
-				order = 4,
-			}
-
-			-- Not inline: AceConfig renders a non-inline nested group as its own
-			-- expandable/collapsible tree node (exactly how the rest of ElvUI's
-			-- own settings window nests things), rather than always-open inline
-			-- content -- the closest native equivalent to an accordion section.
-			args[path..'Group'] = {
-				type = 'group',
-				name = node.label,
-				order = i * 10,
-				args = childArgs,
-			}
+			withChildren[#withChildren + 1] = node
 		else
-			BF:BuildLeafArgs(args, node, path, path, i * 10)
+			leaves[#leaves + 1] = node
 		end
 	end
-	return args
+
+	local reorderArgs = BF:BuildReorderArgs(ordered, groupKey, leaves)
+
+	if #withChildren == 0 then
+		return reorderArgs, false
+	end
+
+	local args = {
+		reorderTab = {
+			type = 'group',
+			name = 'Reorder',
+			order = 1,
+			args = reorderArgs,
+		},
+	}
+
+	for i, node in ipairs(withChildren) do
+		local path = node.path
+		local childArgs, childHasTabs = BF:BuildCategoryArgs(node.children, path)
+
+		-- A category with its own tab doesn't also get a row in the "Reorder"
+		-- tab -- that used to leave e.g. "Soulbound" showing up twice (once as
+		-- a flat toggle, once as its own panel). Instead, its enable toggle
+		-- becomes the first row inside its own tab, above the nested tab strip
+		-- (if it has one) or the flat reorder content (if it doesn't).
+		BF:BuildLeafArgs(childArgs, node, 'enable', path, 0)
+		childArgs.enable.name = 'Enable '..node.label
+		childArgs.enable.width = 'full'
+
+		-- Never inline: this must stay a distinct, non-inline group so the
+		-- parent's `childGroups = 'tab'` (set below) picks it up as one of its
+		-- tabs, rather than AceConfigDialog embedding its content directly.
+		args[path..'Tab'] = {
+			type = 'group',
+			name = node.label,
+			order = i + 1,
+			childGroups = childHasTabs and 'tab' or nil,
+			args = childArgs,
+		}
+	end
+
+	return args, true
 end
 
 -- Builds a plain AceConfig options table and attaches it to E.Options.args,
@@ -202,6 +236,10 @@ function BF:BuildOptions()
 		type = 'group',
 		name = 'Bag Categories',
 		order = 100,
+		-- Lets the category tabs merged in below (see the end of this
+		-- function) render as an actual tab strip instead of AceConfigDialog's
+		-- default click-to-expand tree nesting.
+		childGroups = 'tab',
 		args = {
 			nameHeader = {
 				type = 'header',
@@ -219,19 +257,35 @@ function BF:BuildOptions()
 				order = 2.4,
 			},
 			optionsSpacer = Spacer(2.5),
+			-- name = '' (rather than 'Options') makes FeedOptions create a plain
+			-- borderless SimpleGroup instead of a titled InlineGroup -- see
+			-- AceConfigDialog-3.0.lua's FeedOptions: it only draws the bordered
+			-- box with a title cut into the top edge when `name` is non-empty.
+			-- The section title instead comes from the 'header' arg below,
+			-- matching the header-above-description look used at the top of
+			-- this panel (nameHeader/description) rather than a boxed title.
 			options = {
 				type = 'group',
 				inline = true,
-				name = 'Options',
+				name = '',
 				order = 3,
 				args = {
-					topSpacer = Spacer(0),
+					header = {
+						type = 'header',
+						name = 'Options',
+						order = 0,
+					},
 					enable = {
 						type = 'toggle',
 						name = _G.ENABLE or 'Enable',
 						desc = 'Group items into categories in the bag window.',
 						order = 1,
-						width = 'full',
+						-- 'relative' (rather than the fixed-pixel 'half') sizes each
+						-- toggle to a fraction of the panel's actual current width, so
+						-- two per row fill the row edge-to-edge instead of leaving the
+						-- rest of the panel empty and truncating the longer labels.
+						width = 'relative',
+						relWidth = 0.33,
 						get = function() return BF.db.enable end,
 						set = function(_, value) BF:SetEnabled(value, false) end,
 					},
@@ -240,7 +294,8 @@ function BF:BuildOptions()
 						name = 'Enable for Bank',
 						desc = 'Also group items into the same categories in the bank window.',
 						order = 2,
-						width = 'full',
+						width = 'relative',
+						relWidth = 0.33,
 						get = function() return BF.db.enableBank end,
 						set = function(_, value) BF:SetEnabled(value, true) end,
 					},
@@ -249,7 +304,8 @@ function BF:BuildOptions()
 						name = 'Show Bag/Bank Space Count',
 						desc = 'Show a used/total slot count (e.g. 74/89) in the top-left corner of the bag and bank windows. Excludes the Keyring.',
 						order = 3,
-						width = 'full',
+						width = 'relative',
+						relWidth = 0.33,
 						get = function() return BF.db.showSlotCount end,
 						set = function(_, value)
 							BF.db.showSlotCount = value
@@ -262,7 +318,8 @@ function BF:BuildOptions()
 						name = 'Use ItemRack Categories',
 						desc = 'If ItemRack is installed, add each of your saved ItemRack equipment sets as a Soulbound -> Equipment subcategory -- e.g. a "Tank Set" or "PvP Set" you built in ItemRack shows up as a matching subcategory there, grouping that gear together.',
 						order = 4,
-						width = 'full',
+						width = 'relative',
+						relWidth = 0.33,
 						get = function() return BF.db.itemRackSetsEnabled end,
 						set = function(_, value)
 							BF.db.itemRackSetsEnabled = value
@@ -271,13 +328,13 @@ function BF:BuildOptions()
 							BF:ScheduleLayout(true)
 						end,
 					},
-					valueSpacer = Spacer(4.5),
 					showBagValue = {
 						type = 'toggle',
 						name = 'Show Bag/Bank Value',
 						desc = 'Show the total value of your bag/bank contents (using the price source below) next to the slot count.',
 						order = 5,
-						width = 'full',
+						width = 'relative',
+						relWidth = 0.33,
 						get = function() return BF.db.showBagValue end,
 						set = function(_, value)
 							BF.db.showBagValue = value
@@ -290,7 +347,8 @@ function BF:BuildOptions()
 						name = 'Price Source',
 						desc = 'Which addon\'s price data to total up. Only sources from an addon you actually have installed will produce a value -- see the warning below if the selected one isn\'t available.',
 						order = 6,
-						width = 'full',
+						width = 'relative',
+						relWidth = 0.33,
 						values = function()
 							local values = {}
 							for _, source in ipairs(BF.PriceSources) do
@@ -320,18 +378,28 @@ function BF:BuildOptions()
 				},
 			},
 			categoriesSpacer = Spacer(3.5),
+			categoriesHeader = {
+				type = 'header',
+				name = 'Categories & Sort Order',
+				order = 3.6,
+			},
 			categoriesDesc = {
 				type = 'description',
-				name = 'Choose which categories to group. Unchecking a subcategory falls back to its parent category; unchecking a top-level category falls back to Miscellaneous. Drag categories in the list below (and inside each category\'s own panel) to reorder how they\'re stacked in the bag.',
+				name = 'Choose which categories to group. Unchecking a subcategory falls back to its parent category; unchecking a top-level category falls back to Miscellaneous. Use the Reorder tab below to drag categories into a custom order; categories with their own subcategories (Soulbound, Trade Goods, Recipes) get their own tab, with a Reorder tab of their own inside it.',
 				order = 4,
-			},
-			categories = {
-				type = 'group',
-				inline = true,
-				name = 'Categories & Sort Order',
-				order = 5,
-				args = BF:BuildCategoryArgs(BF.CategoryTree, BF.RootOrderKey),
 			},
 		},
 	}
+
+	-- The category tabs ("Reorder" plus one per category that has its own
+	-- subcategories) are merged directly into bagCategories' own args, rather
+	-- than nested under a "categories" sub-group, so `childGroups = 'tab'`
+	-- below renders them as an actual tab strip right on this page instead of
+	-- requiring an extra click into a nested group (see BuildCategoryArgs).
+	-- Offset past categoriesDesc's order=4 so they land after it.
+	local categoryTabs = BF:BuildCategoryArgs(BF.CategoryTree, BF.RootOrderKey)
+	for key, tab in pairs(categoryTabs) do
+		tab.order = 4 + tab.order
+		E.Options.args.bagCategories.args[key] = tab
+	end
 end
