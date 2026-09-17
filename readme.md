@@ -4,7 +4,7 @@ Splits ElvUI's bag and bank windows into labeled, collapsible categories — Que
 
 | | |
 |---|---|
-| **Version** | 1.0.0 |
+| **Version** | 1.1.0 |
 | **Author** | ludvigaf |
 | **Requires** | ElvUI |
 | **Optional** | ItemRack, Auctionator |
@@ -31,8 +31,8 @@ A grouped bag window. Soulbound gear is further split into per-set panels — `F
 
 | | |
 |---|---|
-| ![A wider bag layout showing Equipment and Miscellaneous as side-by-side columns, with Feral Tank and Restoration nested as their own side-by-side columns beneath Equipment.](Gallery/Gallery-3.png) | ![A third bag example with an additional Feral DPS equipment set and a Trade Goods > Cloth subcategory holding a single item.](Gallery/Gallery-4.png) |
-| At extra width, sibling categories share a row — here `Equipment`/`Miscellaneous`, and `Feral Tank`/`Restoration` nested underneath. | A newly-created ItemRack set (`Feral DPS`) and a live Trade Goods subtype (`Cloth`) both appear without any manual setup. |
+| ![A wider bag layout showing Equipment and Miscellaneous as side-by-side columns, with Feral Tank and Restoration nested as their own side-by-side columns beneath Equipment.](Gallery/Gallery-3.png) |
+| At extra width, sibling categories share a row — such as `Feral Tank`/`Restoration`. | |
 
 ## Category model
 
