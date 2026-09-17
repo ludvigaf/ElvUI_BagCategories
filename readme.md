@@ -29,10 +29,8 @@ Every item is placed by a single classification pass per slot: item class, subcl
 
 A grouped bag window. Soulbound gear is further split into per-set panels — `Feral Tank` and `Restoration` — picked up automatically from ItemRack.
 
-| | |
-|---|---|
-| ![A wider bag layout showing Equipment and Miscellaneous as side-by-side columns, with Feral Tank and Restoration nested as their own side-by-side columns beneath Equipment.](Gallery/Gallery-3.png) |
-| At extra width, sibling categories share a row — such as `Feral Tank`/`Restoration`. | |
+![A wider bag layout showing Equipment and Miscellaneous as side-by-side columns, with Feral Tank and Restoration nested as their own side-by-side columns beneath Equipment.](Gallery/Gallery-3.png)
+At extra width, sibling categories share a row — such as `Feral Tank`/`Restoration`.
 
 ## Category model
 
