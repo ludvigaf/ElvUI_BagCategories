@@ -1,3 +1,4 @@
+![ElvUI Bag Categories logotype](Gallery/icon.png)
 # ElvUI Bag Categories
 
 Splits ElvUI's bag and bank windows into labeled, collapsible categories — Quest Items, Currency, Soulbound gear, Trade Goods, and a dozen more — instead of one long grid of icons, with a drag-to-reorder sort, per-category on/off switches, and an optional running gold total.
